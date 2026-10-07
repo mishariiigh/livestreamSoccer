@@ -1,7 +1,7 @@
 import HomePage from "@/components/home-page";
-import { getPublicEvents } from "@/lib/events";
+import { getPublicFixtureSchedule } from "@/lib/sports/matches";
 
 export default async function Home() {
-  const initialEvents = await getPublicEvents();
-  return <HomePage initialEvents={initialEvents} />;
+  const fixtureSchedule = await getPublicFixtureSchedule();
+  return <HomePage fixtureSchedule={fixtureSchedule} />;
 }

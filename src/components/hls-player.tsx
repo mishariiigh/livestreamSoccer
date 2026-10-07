@@ -3,7 +3,7 @@
 import Hls from "hls.js";
 import { useEffect, useRef, useState } from "react";
 
-export default function HlsPlayer({ src, title, captions }: { src: string; title: string; captions?: string }) {
+export default function HlsPlayer({ src, title, captions, onFatalError }: { src: string; title: string; captions?: string; onFatalError?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [message, setMessage] = useState("");
@@ -17,9 +17,13 @@ export default function HlsPlayer({ src, title, captions }: { src: string; title
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
-      video.addEventListener("error", () => setMessage("تعذر تحميل البث. حاول إعادة الاتصال."), { once: true });
+      const handleNativeError = () => {
+        setMessage("تعذر تحميل البث. حاول إعادة الاتصال.");
+        onFatalError?.();
+      };
+      video.addEventListener("error", handleNativeError, { once: true });
       void video.play().catch(() => undefined);
-      return () => { video.pause(); video.removeAttribute("src"); video.load(); };
+      return () => { video.pause(); video.removeEventListener("error", handleNativeError); video.removeAttribute("src"); video.load(); };
     }
 
     if (!Hls.isSupported()) {
@@ -35,6 +39,7 @@ export default function HlsPlayer({ src, title, captions }: { src: string; title
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (disposed || !data.fatal) return;
       setMessage("انقطع الاتصال بالبث. جارٍ إعادة المحاولة…");
+      onFatalError?.();
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
       else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
       else {
@@ -45,7 +50,7 @@ export default function HlsPlayer({ src, title, captions }: { src: string; title
     });
 
     return () => { disposed = true; hls.destroy(); hlsRef.current = null; };
-  }, [src, retry]);
+  }, [onFatalError, src, retry]);
 
   return (
     <div className="player-frame">

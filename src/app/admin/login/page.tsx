@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AuthForm from "@/components/auth-form";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "دخول الإدارة", robots: { index: false, follow: false } };
-export default function AdminLoginPage() { return <AuthForm mode="admin" />; }
+export default function AdminLoginPage() { redirect("/admin"); }

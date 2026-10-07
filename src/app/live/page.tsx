@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import EventListing from "@/components/event-listing";
-import { getPublicEvents } from "@/lib/events";
+import LiveMatchListing from "@/components/live-match-listing";
+import { getLiveMatches } from "@/lib/sports/matches";
 
-export const metadata: Metadata = { title: "مباشر الآن", description: "شاهد الفعاليات المباشرة المرخصة على مدى.", alternates: { canonical: "/live" } };
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "مباشر الآن", description: "المباريات المنشورة التي يتوفر لها بث مصرح به على مدى.", alternates: { canonical: "/live" } };
 
 export default async function LivePage() {
-  const initialEvents = await getPublicEvents();
-  return <EventListing status="live" initialEvents={initialEvents} />;
+  const { matches, error } = await getLiveMatches();
+  return <LiveMatchListing matches={matches} error={error} />;
 }

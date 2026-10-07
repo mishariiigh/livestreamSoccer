@@ -1,33 +1,93 @@
 import { z } from "zod";
 
-const localizedText = z.object({ ar: z.string().trim().min(1).max(240), en: z.string().trim().min(1).max(240) });
 const secureUrl = z.string().url().refine((value) => value.startsWith("https://"), "HTTPS URL required");
 
-export const eventInput = z.object({
-  slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120),
-  title: localizedText,
-  description: z.object({ ar: z.string().max(5000), en: z.string().max(5000) }),
-  category_id: z.string().max(60).nullable().optional(),
-  starts_at: z.string().datetime(),
-  thumbnail_url: secureUrl,
-  status: z.enum(["upcoming", "live", "ended"]).default("upcoming"),
-  published: z.boolean().default(false),
+/** Internal fixture ID generated for every manually created match (for example ML-20261007-0001). */
+export const fixtureIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Z0-9][A-Z0-9-]{2,39}$/, "Invalid fixture ID");
+
+const optionalLogoUrl = secureUrl.nullable().optional().or(z.literal("").transform(() => null));
+
+export const matchInput = z.object({
+  match_date: z.string().date(),
+  kickoff_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Kickoff time must be HH:MM"),
+  competition: z.string().trim().min(1).max(80),
+  home_team: z.string().trim().min(1).max(120),
+  away_team: z.string().trim().min(1).max(120),
+  home_team_logo: optionalLogoUrl,
+  away_team_logo: optionalLogoUrl,
+  published: z.boolean().default(true),
 });
 
-export const streamInput = z.object({
-  event_id: z.string().uuid(), provider: z.string().trim().min(1).max(100),
-  provider_stream_id: z.string().max(200).optional(), playback_url: secureUrl,
-  captions_url: secureUrl.nullable().optional(), stream_status: z.enum(["live", "offline", "scheduled"]), enabled: z.boolean(),
+export const matchUpdateInput = z.object({
+  match_date: z.string().date().optional(),
+  kickoff_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  competition: z.string().trim().min(1).max(80).optional(),
+  home_team: z.string().trim().min(1).max(120).optional(),
+  away_team: z.string().trim().min(1).max(120).optional(),
+  home_team_logo: optionalLogoUrl,
+  away_team_logo: optionalLogoUrl,
+  published: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field is required");
+
+export const fixtureStreamInput = z.object({
+  fixture_id: fixtureIdSchema,
+  stream_type: z.enum(["hls", "embed"]),
+  stream_url: secureUrl,
+  provider_name: z.string().trim().min(1).max(120),
+  active: z.boolean(),
+  priority: z.number().int().min(0).max(10000),
+}).superRefine((value, context) => {
+  if (value.stream_type === "hls") {
+    try {
+      if (!new URL(value.stream_url).pathname.toLowerCase().endsWith(".m3u8")) throw new Error();
+    } catch {
+      context.addIssue({ code: "custom", path: ["stream_url"], message: "HLS stream URLs must end in .m3u8." });
+    }
+  }
 });
 
-export const adInput = z.object({
-  name: z.string().trim().min(1).max(180),
-  type: z.enum(["top-banner", "sidebar-banner", "in-content", "pre-roll", "mid-roll", "post-roll", "sponsored-event", "interstitial"]),
-  image_url: secureUrl.nullable().optional(), video_url: secureUrl.nullable().optional(), destination_url: z.string().url().refine((value) => value.startsWith("https://") || value.startsWith("http://")).nullable().optional(),
-  html_code: z.string().max(20000).nullable().optional(), active: z.boolean().default(false), start_date: z.string().datetime().nullable().optional(), end_date: z.string().datetime().nullable().optional(), event_id: z.string().uuid().nullable().optional(),
+export const fixtureStreamUpdateInput = z.object({
+  id: z.string().uuid(),
+  fixture_id: fixtureIdSchema.optional(),
+  stream_type: z.enum(["hls", "embed"]).optional(),
+  stream_url: secureUrl.optional(),
+  provider_name: z.string().trim().min(1).max(120).optional(),
+  active: z.boolean().optional(),
+  priority: z.number().int().min(0).max(10000).optional(),
+}).superRefine((value, context) => {
+  const hasUpdate = Object.keys(value).some((key) => key !== "id");
+  if (!hasUpdate) context.addIssue({ code: "custom", message: "At least one update is required." });
+  if ((value.stream_type === undefined) !== (value.stream_url === undefined)) {
+    context.addIssue({ code: "custom", path: ["stream_url"], message: "Update the stream type and URL together." });
+  }
+  if (value.stream_type === "hls" && value.stream_url) {
+    try {
+      if (!new URL(value.stream_url).pathname.toLowerCase().endsWith(".m3u8")) throw new Error();
+    } catch {
+      context.addIssue({ code: "custom", path: ["stream_url"], message: "HLS stream URLs must end in .m3u8." });
+    }
+  }
 });
 
-export const adTrackingInput = z.object({ adId: z.string().uuid(), eventId: z.string().uuid().optional(), sessionId: z.string().uuid().optional() });
-export const viewerInput = z.object({ visitId: z.string().uuid(), visitorId: z.string().uuid(), eventId: z.string().uuid().optional(), referrerHost: z.string().max(255).optional(), deviceType: z.enum(["mobile", "tablet", "desktop", "other"]).optional(), browser: z.string().max(100).optional() });
-export const viewerHeartbeatInput = z.object({ visitId: z.string().uuid(), durationSeconds: z.number().int().min(0).max(86400) });
-export const revenueInput = z.object({ revenue_date: z.string().date(), amount: z.number().finite().min(0), currency: z.string().length(3).default("USD"), source: z.string().trim().min(1).max(200), event_id: z.string().uuid().nullable().optional(), ad_id: z.string().uuid().nullable().optional() });
+export const fixtureStreamDeleteInput = z.object({ id: z.string().uuid() });
+
+export const officialWatchLinkInput = z.object({
+  fixture_id: fixtureIdSchema,
+  country_region: z.string().trim().min(2).max(100),
+  broadcaster_name: z.string().trim().min(1).max(120),
+  official_watch_url: secureUrl,
+  active: z.boolean(),
+});
+
+export const officialWatchLinkUpdateInput = z.object({
+  id: z.string().uuid(),
+  country_region: z.string().trim().min(2).max(100).optional(),
+  broadcaster_name: z.string().trim().min(1).max(120).optional(),
+  official_watch_url: secureUrl.optional(),
+  active: z.boolean().optional(),
+}).refine((value) => Object.keys(value).some((key) => key !== "id"));
+
+export const officialWatchLinkDeleteInput = z.object({ id: z.string().uuid() });
