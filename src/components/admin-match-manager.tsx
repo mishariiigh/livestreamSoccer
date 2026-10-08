@@ -122,7 +122,6 @@ export default function AdminConsole() {
   const [saving, setSaving] = useState(false);
   const [editingMatch, setEditingMatch] = useState<string | null>(null);
   const [editingStreamId, setEditingStreamId] = useState<string | null>(null);
-  const [addStreamMode, setAddStreamMode] = useState(false);
   const [search, setSearch] = useState("");
 
   const [draft, setDraft] = useState({
@@ -193,7 +192,6 @@ export default function AdminConsole() {
   function resetDraft() {
     setEditingMatch(null);
     setEditingStreamId(null);
-    setAddStreamMode(false);
     setDraft((current) => ({
       ...current,
       homeTeam: "",
@@ -251,34 +249,14 @@ export default function AdminConsole() {
     }
     if (!parsed.fields) return;
 
-    // `addMode` forces a POST so a match can hold several sources (primary plus
-    // fallbacks). Otherwise we update the source currently loaded in the form.
-    const updating = Boolean(editingStreamId) && !addStreamMode;
     const row = await requestAdmin(
       "/api/admin/fixture-streams",
-      updating ? "PATCH" : "POST",
-      updating ? { id: editingStreamId, ...parsed.fields } : parsed.fields,
+      editingStreamId ? "PATCH" : "POST",
+      editingStreamId ? { id: editingStreamId, ...parsed.fields } : parsed.fields,
     );
     if (!row) throw new Error("تعذر حفظ مصدر البث.");
     const item = mapStream(row);
     setStreams((current) => [...current.filter((stream) => stream.id !== item.id), item]);
-    setEditingStreamId(item.id);
-    setAddStreamMode(false);
-  }
-
-  /** Loads an existing source into the stream fields for editing. */
-  function loadStreamForEdit(stream: ManagedStream) {
-    setAddStreamMode(false);
-    setEditingStreamId(stream.id);
-    setDraft((current) => ({
-      ...current,
-      streamType: stream.streamType,
-      streamUrl: stream.streamUrl,
-      providerName: stream.providerName,
-      active: stream.active,
-      priority: String(stream.priority),
-    }));
-    document.getElementById("match-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function submitMatch(form: React.FormEvent<HTMLFormElement>) {
@@ -305,8 +283,6 @@ export default function AdminConsole() {
       // match saved without the stream the administrator intended to attach.
       if (draft.streamUrl.trim()) readStreamFields(editingMatch ?? "PENDING");
 
-      // A loaded match is always UPDATEd. It is never POSTed again, which would
-      // create a duplicate match every time a stream is saved.
       const row = await requestAdmin(
         editingMatch ? `/api/admin/matches/${editingMatch}` : "/api/admin/matches",
         editingMatch ? "PATCH" : "POST",
@@ -344,7 +320,6 @@ export default function AdminConsole() {
 
     setEditingMatch(match.fixtureId);
     setEditingStreamId(stream?.id ?? null);
-    setAddStreamMode(false);
     setDraft({
       matchDate: match.matchDate,
       kickoffTime: match.kickoffTime,
@@ -562,22 +537,6 @@ export default function AdminConsole() {
                   <Plus size={16} />
                   {saving ? "جارٍ الحفظ…" : editingMatch ? "حفظ التعديلات" : "حفظ المباراة"}
                 </button>
-                {editingMatch && draft.streamUrl.trim() && !addStreamMode && (
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    onClick={() => {
-                      setAddStreamMode(true);
-                      setEditingStreamId(null);
-                      setDraft((current) => ({ ...current, ...EMPTY_STREAM }));
-                    }}
-                  >
-                    <Plus size={14} /> إضافة مصدر احتياطي
-                  </button>
-                )}
-                {addStreamMode && (
-                  <span className="secondary-action" aria-disabled="true">مصدر جديد · سيُضاف كاحتياطي</span>
-                )}
                 {editingMatch && (
                   <button className="secondary-action" type="button" onClick={resetDraft}>إلغاء</button>
                 )}
@@ -727,7 +686,6 @@ export default function AdminConsole() {
                               </button>
                             </td>
                             <td className="table-actions">
-                              <button type="button" onClick={() => loadStreamForEdit(stream)} aria-label="تعديل مصدر البث"><Pencil size={14} /></button>
                               <button type="button" onClick={() => void deleteStream(stream.id)} aria-label="حذف مصدر البث"><Trash2 size={15} /></button>
                             </td>
                           </tr>
