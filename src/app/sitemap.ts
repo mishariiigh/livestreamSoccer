@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { getLiveMatches } from "@/lib/sports/matches";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mada.live";
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://me7gan-live.com";
   const { matches } = await getLiveMatches();
   const lastModified = new Date();
   return [

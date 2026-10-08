@@ -1,4 +1,10 @@
-export type FixtureStreamType = "hls" | "embed";
+export type FixtureStreamType = "hls" | "embed" | "external";
+
+/**
+ * `external` is an official broadcaster / streaming link. It is never sent to a
+ * player: the public match page renders it as an outbound link instead.
+ */
+export type PlaybackStreamType = "hls" | "embed";
 
 export type AuthorizedFixtureStream = {
   id: string;

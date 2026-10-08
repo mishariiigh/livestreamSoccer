@@ -108,20 +108,34 @@ export async function getPublicFixtureSchedule(): Promise<PublicFixtureSchedule>
   };
 }
 
-/** Published matches that have at least one active authorized stream. */
+/**
+ * Published matches available to watch now.
+ *
+ * Includes matches with an active playable stream (hls/embed) **and** matches
+ * with an active official external link, so an external-only match stays visible
+ * on /live and is labelled as an official broadcast on its card.
+ *
+ * `hasActiveStream` is only true for a playable on-site source; an external link
+ * alone leaves it false so the UI labels the match correctly.
+ */
 export async function getLiveMatches(): Promise<{ matches: PublicMatch[]; error: boolean }> {
   const client = await createSupabaseServerClient();
   if (!client) return { matches: [], error: false };
 
   const { data: streamRows, error: streamError } = await client
     .from("fixture_streams")
-    .select("fixture_id")
+    .select("fixture_id, stream_type")
     .eq("active", true)
     .range(0, 999);
   if (streamError) return { matches: [], error: true };
 
-  const fixtureIds = [...new Set((streamRows ?? []).map((row) => (row as { fixture_id: string }).fixture_id))];
+  const rows = (streamRows ?? []) as { fixture_id: string; stream_type: string }[];
+  const fixtureIds = [...new Set(rows.map((row) => row.fixture_id))];
   if (fixtureIds.length === 0) return { matches: [], error: false };
+
+  const playable = new Set(
+    rows.filter((row) => row.stream_type === "hls" || row.stream_type === "embed").map((row) => row.fixture_id),
+  );
 
   const { data, error } = await client
     .from("matches")
@@ -133,7 +147,9 @@ export async function getLiveMatches(): Promise<{ matches: PublicMatch[]; error:
   if (error) return { matches: [], error: true };
 
   return {
-    matches: (data as MatchRow[]).map((row) => mapMatch(row, { hasActiveStream: true })),
+    matches: (data as MatchRow[]).map((row) =>
+      mapMatch(row, { hasActiveStream: playable.has(row.fixture_id) }),
+    ),
     error: false,
   };
 }

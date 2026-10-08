@@ -34,6 +34,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# local safety backups (never commit)
+*.backup
+*.bak
+
 # supabase CLI local state
 /supabase/.temp
 

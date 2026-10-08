@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import { COMPETITIONS } from "@/lib/sports/competitions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { BRAND } from "@/lib/brand";
 import type { FixtureStreamType } from "@/lib/streaming/fixture-stream-types";
+import { detectStreamSource, type StreamSourceKind, type StreamTypePreference } from "@/lib/streaming/stream-source";
 
 /**
  * The single admin surface: create and manage a match together with its stream.
@@ -53,7 +55,7 @@ type ManagedStream = {
 };
 
 const EMPTY_STREAM = {
-  streamType: "hls" as FixtureStreamType,
+  streamType: "auto" as StreamTypePreference,
   streamUrl: "",
   providerName: "",
   active: true,
@@ -110,6 +112,36 @@ function compareMatches(first: ManagedMatch, second: ManagedMatch) {
 /** Highest priority first, so the preferred source is listed and selected first. */
 function compareStreams(first: ManagedStream, second: ManagedStream) {
   return second.priority - first.priority || first.streamUrl.localeCompare(second.streamUrl);
+}
+
+function detectionLabel(kind: StreamSourceKind) {
+  switch (kind) {
+    case "hls":
+      return "بث مباشر / HLS";
+    case "youtube":
+      return "يوتيوب";
+    case "vimeo":
+      return "فيميو";
+    case "embed":
+      return "رابط تضمين";
+    case "ambiguous":
+      return "صيغة غير معروفة";
+    default:
+      return "صفحة ويب عادية (غير مدعومة)";
+  }
+}
+
+function playerLabel(player: "hls" | "embed" | "external" | "unsupported") {
+  if (player === "hls") return "مشغّل البث المباشر";
+  if (player === "embed") return "مشغّل العرض المضمّن";
+  if (player === "external") return "رابط خارجي — يُفتح في نافذة جديدة";
+  return "لا يوجد مشغّل — المصدر غير مدعوم";
+}
+
+function streamTypeLabel(type: FixtureStreamType) {
+  if (type === "hls") return "HLS";
+  if (type === "external") return "رابط رسمي";
+  return "Embed";
 }
 
 export default function AdminConsole() {
@@ -212,10 +244,55 @@ export default function AdminConsole() {
       url = new URL(rawUrl);
       if (url.protocol !== "https:") throw new Error();
     } catch {
-      throw new Error("أدخل رابط بث آمن يبدأ بـ https://.");
+      throw new Error("أدخل رابط بث صالح يبدأ بـ https://.");
     }
-    if (draft.streamType === "hls" && !url.pathname.toLowerCase().endsWith(".m3u8")) {
-      throw new Error("روابط HLS يجب أن تنتهي بـ .m3u8.");
+    // The URL is accepted on syntax alone. A stream URL does not have to end in
+    // `.m3u8` — providers commonly hide the extension behind query parameters or
+    // a generated path. The player decides whether the URL is actually playable.
+
+    // Detection decides what this URL actually is. The stored `stream_type` is
+    // the resolved player type, not merely the administrator's dropdown choice.
+    // An official external link is an outbound reference to a broadcaster, not a
+    // playable source. It only has to be a valid HTTPS URL; detection is skipped
+    // so a broadcast page is never mistaken for an embeddable stream.
+    if (draft.streamType === "external") {
+      const priority = Number(draft.priority);
+      if (!Number.isInteger(priority) || priority < 0 || priority > 10000) {
+        throw new Error("الأولوية يجب أن تكون رقماً بين 0 و10000.");
+      }
+      if (!draft.providerName.trim()) {
+        throw new Error("أدخل اسم مزود البث.");
+      }
+      return {
+        hasStream: true,
+        fields: {
+          fixture_id: fixtureId,
+          stream_type: "external",
+          stream_url: url.toString(),
+          provider_name: draft.providerName.trim(),
+          active: draft.active,
+          priority,
+        },
+      } as const;
+    }
+
+    // Detection decides what this URL actually is. The stored `stream_type` is
+    // the resolved player type, not merely the administrator's dropdown choice.
+    const detected = detectStreamSource(rawUrl, draft.streamType);
+
+    // When the administrator explicitly selected HLS, trust that choice for an
+    // HTTPS URL instead of rejecting it because the provider uses a generated
+    // (non-standard) URL that detection cannot classify.
+    if (draft.streamType === "hls") {
+      if (url.protocol !== "https:") {
+        throw new Error("رابط HLS يجب أن يبدأ بـ https://.");
+      }
+    } else if (!detected.source.playable) {
+      throw new Error(
+        draft.streamType === "embed"
+          ? "يبدو أن هذا رابط صفحة ويب عادية. استخدم رابط بث أو رابط تضمين مصرح به."
+          : "يبدو أن هذا رابط صفحة ويب عادية وليس مصدر بث مدعوم.",
+      );
     }
 
     const priority = Number(draft.priority);
@@ -230,8 +307,10 @@ export default function AdminConsole() {
       hasStream: true,
       fields: {
         fixture_id: fixtureId,
-        stream_type: draft.streamType,
-        stream_url: url.toString(),
+        stream_type: detected.persistedType,
+        // Store the normalized URL so YouTube watch links are persisted in their
+        // embed form and never handed to the HLS player.
+        stream_url: detected.source.normalized ? detected.source.url : url.toString(),
         provider_name: draft.providerName.trim(),
         active: draft.active,
         priority,
@@ -404,6 +483,8 @@ export default function AdminConsole() {
 
   const today = scheduleDate();
   const tomorrow = scheduleDate(1);
+  // Live detection preview for the administrator, updated as the URL is typed.
+  const detected = detectStreamSource(draft.streamUrl.trim(), draft.streamType);
   const visibleMatches = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return matches;
@@ -419,22 +500,21 @@ export default function AdminConsole() {
       <div className="admin-shell">
         <aside className="admin-sidebar">
           <Link href="/admin" className="admin-brand">
-            <span className="brand-mark">
-              <span />
-            </span>
-            <span>
-              مدى <small>CONTROL ROOM</small>
+            <span className="brand-mark" aria-hidden="true">{BRAND.mark}</span>
+            <span className="admin-brand-copy">
+              <strong>{BRAND.ar}</strong>
+              <small>{BRAND.en}</small>
             </span>
           </Link>
           <span className="admin-nav-caption">مساحة العمل</span>
           <nav>
             <Link href="/admin" className="admin-nav-link active">
-              <CalendarDays size={17} />
+              <CalendarDays size={17} aria-hidden="true" />
               المباريات
             </Link>
           </nav>
           <div className="admin-legal">
-            <ShieldCheck size={16} />
+            <ShieldCheck size={16} aria-hidden="true" />
             <span>إدارة المحتوى المصرح به فقط</span>
           </div>
         </aside>
@@ -442,7 +522,7 @@ export default function AdminConsole() {
         <section className="admin-content">
           <header className="admin-topbar">
             <div>
-              <span className="eyebrow">MADA / CONTROL ROOM</span>
+              <span className="eyebrow">{BRAND.en} / CONTROL ROOM</span>
               <h1>إدارة المباريات</h1>
             </div>
             <div className="admin-top-actions">
@@ -505,20 +585,41 @@ export default function AdminConsole() {
                 <input type="url" value={draft.awayTeamLogo} onChange={(event) => setDraft({ ...draft, awayTeamLogo: event.target.value })} placeholder="https://…" />
               </AdminField>
 
-              <AdminField label="نوع البث" required>
-                <select value={draft.streamType} onChange={(event) => setDraft({ ...draft, streamType: event.target.value as FixtureStreamType })}>
-                  <option value="hls">HLS (.m3u8)</option>
+              <AdminField label="نوع المصدر" required>
+                <select value={draft.streamType} onChange={(event) => setDraft({ ...draft, streamType: event.target.value as StreamTypePreference })}>
+                  <option value="auto">كشف تلقائي (موصى به)</option>
+                  <option value="hls">HLS / رابط بث مباشر</option>
                   <option value="embed">Embed / iframe</option>
+                  <option value="external">رابط رسمي خارجي</option>
                 </select>
               </AdminField>
-              <AdminField label="رابط البث الآمن HTTPS">
+              <AdminField label={draft.streamType === "external" ? "رابط المشاهدة الرسمي" : "رابط البث الآمن HTTPS"}>
                 <input
                   type="url"
                   value={draft.streamUrl}
                   onChange={(event) => setDraft({ ...draft, streamUrl: event.target.value })}
-                  placeholder={draft.streamType === "hls" ? "https://provider.example/live/index.m3u8" : "https://provider.example/embed/match"}
+                  placeholder={draft.streamType === "external" ? "https://official-broadcaster.example/match" : "https://provider.example/live/index.m3u8"}
                 />
               </AdminField>
+              {draft.streamUrl.trim() && (
+                <div className="stream-detection" role="status">
+                  <p className="stream-detection-kind">
+                    <strong>{draft.streamType === "external" ? "رابط رسمي خارجي" : detectionLabel(detected.source.kind)}</strong>
+                    <span>{detected.source.reason}</span>
+                  </p>
+                  {detected.source.normalized && (
+                    <p className="stream-detection-url">
+                      سيتم الحفظ بصيغة: <code>{detected.source.url}</code>
+                    </p>
+                  )}
+                  <p className="stream-detection-player">
+                    العرض: <strong>{playerLabel(detected.player)}</strong>
+                  </p>
+                  {detected.warnings.map((warning) => (
+                    <p className="stream-detection-warning" role="alert" key={warning}>{warning}</p>
+                  ))}
+                </div>
+              )}
               <AdminField label="اسم مزود البث">
                 <input value={draft.providerName} onChange={(event) => setDraft({ ...draft, providerName: event.target.value })} placeholder="مثال: مزود البث الخاص بك" />
               </AdminField>
@@ -606,7 +707,7 @@ export default function AdminConsole() {
                               </td>
                               <td>
                                 {preferred ? (
-                                  <span>{preferred.streamType === "hls" ? "HLS" : "Embed"}<small>{matchStreams.length > 1 ? ` +${matchStreams.length - 1}` : ""}</small></span>
+                                  <span>{streamTypeLabel(preferred.streamType)}<small>{matchStreams.length > 1 ? ` +${matchStreams.length - 1}` : ""}</small></span>
                                 ) : (
                                   <span className="status-tag">لا يوجد</span>
                                 )}
@@ -678,7 +779,7 @@ export default function AdminConsole() {
                           <tr key={stream.id}>
                             <td><Link className="fixture-stream-link" href={`/match/${stream.fixtureId}`} target="_blank">{stream.fixtureId}</Link></td>
                             <td>{stream.providerName}</td>
-                            <td>{stream.streamType === "hls" ? "HLS" : "Embed"}</td>
+                            <td>{streamTypeLabel(stream.streamType)}</td>
                             <td>{stream.priority}</td>
                             <td>
                               <button type="button" className={stream.active ? "status-tag online" : "status-tag"} onClick={() => void updateStream(stream.id, { active: !stream.active })}>

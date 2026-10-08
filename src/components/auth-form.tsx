@@ -39,7 +39,7 @@ export default function AuthForm() {
   return (
     <main className="auth-page page-width">
       <div className="auth-panel">
-        <span className="eyebrow">MADA / ADMIN ACCESS</span>
+        <span className="eyebrow">ME7GAN-LIVE / ADMIN ACCESS</span>
         <h1>دخول الإدارة</h1>
         <p>يقتصر الدخول على الحسابات الممنوحة دور admin في قاعدة البيانات.</p>
         <form onSubmit={submit}>

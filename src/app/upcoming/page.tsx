@@ -1,21 +1,22 @@
 import type { Metadata } from "next";
-import PublicFixtureSchedule from "@/components/public-fixture-schedule";
+import MatchesListing from "@/components/matches-listing";
 import { getPublicFixtureSchedule } from "@/lib/sports/matches";
+import { BRAND } from "@/lib/brand";
 
-export const metadata: Metadata = { title: "قريباً", description: "مباريات اليوم والغد المنشورة على مدى.", alternates: { canonical: "/upcoming" } };
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "المباريات", description: "جدول مباريات اليوم والغد والبثوث المتاحة لكل مباراة.", alternates: { canonical: "/upcoming" } };
 
 export default async function UpcomingPage() {
   const fixtureSchedule = await getPublicFixtureSchedule();
   return (
-    <main className="page-width listing-page">
-      <div className="listing-top reveal">
-        <div>
-          <span className="eyebrow">MADA / COMING UP</span>
-          <h1>قريباً</h1>
-          <p>مباريات اليوم والغد المنشورة من إدارة الموقع.</p>
-        </div>
+    <main id="main-content" className="page-width listing-page">
+      <div className="page-head">
+        <span className="eyebrow">{BRAND.en} / MATCHES</span>
+        <h1>المباريات</h1>
+        <p>مباريات اليوم والغد المنشورة، مع البث المتاح لكل مباراة.</p>
       </div>
-      <PublicFixtureSchedule {...fixtureSchedule} />
+      <MatchesListing fixtureSchedule={fixtureSchedule} />
     </main>
   );
 }

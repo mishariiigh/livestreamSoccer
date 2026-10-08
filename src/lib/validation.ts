@@ -34,25 +34,17 @@ export const matchUpdateInput = z.object({
 
 export const fixtureStreamInput = z.object({
   fixture_id: fixtureIdSchema,
-  stream_type: z.enum(["hls", "embed"]),
+  stream_type: z.enum(["hls", "embed", "external"]),
   stream_url: secureUrl,
   provider_name: z.string().trim().min(1).max(120),
   active: z.boolean(),
   priority: z.number().int().min(0).max(10000),
-}).superRefine((value, context) => {
-  if (value.stream_type === "hls") {
-    try {
-      if (!new URL(value.stream_url).pathname.toLowerCase().endsWith(".m3u8")) throw new Error();
-    } catch {
-      context.addIssue({ code: "custom", path: ["stream_url"], message: "HLS stream URLs must end in .m3u8." });
-    }
-  }
 });
 
 export const fixtureStreamUpdateInput = z.object({
   id: z.string().uuid(),
   fixture_id: fixtureIdSchema.optional(),
-  stream_type: z.enum(["hls", "embed"]).optional(),
+  stream_type: z.enum(["hls", "embed", "external"]).optional(),
   stream_url: secureUrl.optional(),
   provider_name: z.string().trim().min(1).max(120).optional(),
   active: z.boolean().optional(),
@@ -62,13 +54,6 @@ export const fixtureStreamUpdateInput = z.object({
   if (!hasUpdate) context.addIssue({ code: "custom", message: "At least one update is required." });
   if ((value.stream_type === undefined) !== (value.stream_url === undefined)) {
     context.addIssue({ code: "custom", path: ["stream_url"], message: "Update the stream type and URL together." });
-  }
-  if (value.stream_type === "hls" && value.stream_url) {
-    try {
-      if (!new URL(value.stream_url).pathname.toLowerCase().endsWith(".m3u8")) throw new Error();
-    } catch {
-      context.addIssue({ code: "custom", path: ["stream_url"], message: "HLS stream URLs must end in .m3u8." });
-    }
   }
 });
 

@@ -25,3 +25,63 @@ export async function recordAdminAudit(action: string, entityType: string, entit
   if (!user) return;
   await client.from("audit_logs").insert({ actor_id: user.id, action, entity_type: entityType, entity_id: entityId ?? null, metadata });
 }
+
+/**
+ * Shape of a Supabase/PostgREST error. Declared structurally so this helper does
+ * not depend on a specific client version.
+ */
+export type SupabaseFailure = {
+  message?: string;
+  code?: string;
+  details?: string | null;
+  hint?: string | null;
+};
+
+/**
+ * Logs the real database error behind a failed admin write.
+ *
+ * PostgREST reports constraint violations, RLS denials and permission errors as
+ * a structured error with `code`, `message`, `details` and `hint`. Dropping those
+ * fields (as the admin routes previously did) leaves only a generic message and
+ * makes the actual cause impossible to diagnose from the logs.
+ *
+ * `context` carries the attempted values so a failing write can be reproduced.
+ */
+export function logSupabaseError(scope: string, error: SupabaseFailure, context: Record<string, unknown> = {}) {
+  const code = error.code ?? "(no code)";
+  console.error(`[${scope}] Supabase error`, {
+    code,
+    message: error.message ?? "(no message)",
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    // Map common PostgREST codes to a plain-language reading of the failure.
+    interpretation: interpretPostgrestCode(code),
+    context,
+  });
+}
+
+/** Turns a PostgREST error code into a short human-readable explanation. */
+function interpretPostgrestCode(code: string) {
+  switch (code) {
+    case "23514":
+      return "check constraint violated (a column value is outside its allowed set, e.g. an unrecognised stream_type)";
+    case "23503":
+      return "foreign key violated (referenced row does not exist)";
+    case "23505":
+      return "unique constraint violated (a row with this key already exists)";
+    case "23502":
+      return "not-null constraint violated (a required column was omitted)";
+    case "42501":
+      return "insufficient privilege / RLS policy denied the write";
+    case "42P01":
+      return "table does not exist (migration not applied?)";
+    case "42703":
+      return "column does not exist (schema drift between code and database)";
+    case "PGRST116":
+      return "no row returned (the WHERE clause matched nothing)";
+    case "PGRST204":
+      return "column not found in the exposed schema (schema cache may be stale)";
+    default:
+      return code.startsWith("PGRST") ? "PostgREST request error" : "database error";
+  }
+}

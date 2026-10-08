@@ -1,4 +1,4 @@
-import { checkAdminRequest, recordAdminAudit } from "@/lib/api";
+import { checkAdminRequest, logSupabaseError, recordAdminAudit } from "@/lib/api";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { fixtureStreamDeleteInput, fixtureStreamInput, fixtureStreamUpdateInput } from "@/lib/validation";
 
@@ -14,7 +14,10 @@ export async function GET(request: Request) {
     .order("fixture_id", { ascending: true })
     .order("priority", { ascending: false })
     .range(0, 199);
-  if (error) return Response.json({ error: "Could not load fixture streams." }, { status: 500 });
+  if (error) {
+    logSupabaseError("admin/fixture-streams:list", error);
+    return Response.json({ error: "Could not load fixture streams." }, { status: 500 });
+  }
   return Response.json({ data }, { headers: privateHeaders });
 }
 
@@ -33,7 +36,17 @@ export async function POST(request: Request) {
     .insert({ ...parsed.data, created_by: user.id })
     .select("*")
     .single();
-  if (error) return Response.json({ error: "Could not save fixture stream." }, { status: 400 });
+  if (error) {
+    logSupabaseError("admin/fixture-streams:create", error, {
+      fixture_id: parsed.data.fixture_id,
+      stream_type: parsed.data.stream_type,
+      stream_url: parsed.data.stream_url,
+      provider_name: parsed.data.provider_name,
+      priority: parsed.data.priority,
+      active: parsed.data.active,
+    });
+    return Response.json({ error: "Could not save fixture stream." }, { status: 400 });
+  }
   await recordAdminAudit("create", "fixture_stream", data.id, { fixture_id: data.fixture_id, provider: data.provider_name, stream_type: data.stream_type });
   return Response.json({ data }, { status: 201, headers: privateHeaders });
 }
@@ -52,7 +65,22 @@ export async function PATCH(request: Request) {
     .eq("id", id)
     .select("*")
     .maybeSingle();
-  if (error) return Response.json({ error: "Could not update fixture stream." }, { status: 400 });
+  if (error) {
+    // The real PostgREST error is logged here. Without this the only signal was
+    // the generic message below, which hid constraint and RLS failures.
+    logSupabaseError("admin/fixture-streams:update", error, {
+      id,
+      // The attempted values, so the failed write can be reproduced.
+      attempted_stream_type: updates.stream_type ?? "(unchanged)",
+      attempted_stream_url: updates.stream_url ?? "(unchanged)",
+      attempted_fixture_id: updates.fixture_id ?? "(unchanged)",
+      attempted_provider_name: updates.provider_name ?? "(unchanged)",
+      attempted_priority: updates.priority ?? "(unchanged)",
+      attempted_active: updates.active ?? "(unchanged)",
+      update_keys: Object.keys(updates),
+    });
+    return Response.json({ error: "Could not update fixture stream." }, { status: 400 });
+  }
   if (!data) return Response.json({ error: "Fixture stream not found." }, { status: 404 });
   await recordAdminAudit("update", "fixture_stream", id, updates);
   return Response.json({ data }, { headers: privateHeaders });
@@ -67,7 +95,10 @@ export async function DELETE(request: Request) {
   const client = await createSupabaseServerClient();
   if (!client) return Response.json({ error: "Database is not configured." }, { status: 503 });
   const { data, error } = await client.from("fixture_streams").delete().eq("id", parsed.data.id).select("id").maybeSingle();
-  if (error) return Response.json({ error: "Could not delete fixture stream." }, { status: 400 });
+  if (error) {
+    logSupabaseError("admin/fixture-streams:delete", error, { id: parsed.data.id });
+    return Response.json({ error: "Could not delete fixture stream." }, { status: 400 });
+  }
   if (!data) return Response.json({ error: "Fixture stream not found." }, { status: 404 });
   await recordAdminAudit("delete", "fixture_stream", data.id);
   return Response.json({ success: true }, { headers: privateHeaders });
