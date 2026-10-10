@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import AdSlot from "@/components/ad-slot";
 import MatchesListing from "@/components/matches-listing";
 import { getPublicFixtureSchedule } from "@/lib/sports/matches";
 import { BRAND } from "@/lib/brand";
@@ -17,6 +18,10 @@ export default async function UpcomingPage() {
         <p>مباريات اليوم والغد المنشورة، مع البث المتاح لكل مباراة.</p>
       </div>
       <MatchesListing fixtureSchedule={fixtureSchedule} />
+
+      {/* Advertisement sits below the whole fixture list, keeping it clear of
+          match cards and their stream links. */}
+      <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_FIXTURES} />
     </main>
   );
 }

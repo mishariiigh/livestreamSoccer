@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import Script from "next/script";
 import { LocaleProvider } from "@/components/locale-provider";
 import SiteHeader from "@/components/site-header";
 import { BRAND } from "@/lib/brand";
@@ -45,10 +46,28 @@ export const viewport: Viewport = {
   colorScheme: "light",
 };
 
+/**
+ * AdSense publisher ID. Public by design, and the loader script is rendered
+ * only when it is configured, so a deployment without AdSense makes no request
+ * to Google and shows no reserved ad space.
+ */
+const ADSENSE_CLIENT = process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? "";
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ar" dir="rtl" className="min-h-full">
       <body className="min-h-full antialiased">
+        {/* Loaded once for the whole app. `afterInteractive` keeps it off the
+            critical path and is the strategy Google recommends for AdSense. */}
+        {ADSENSE_CLIENT && (
+          <Script
+            id="adsbygoogle-loader"
+            async
+            strategy="afterInteractive"
+            crossOrigin="anonymous"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+          />
+        )}
         <LocaleProvider>
           <a className="sr-only" href="#main-content">تخط إلى المحتوى الرئيسي</a>
           <SiteHeader />

@@ -1772,6 +1772,49 @@
 .fixture-admin-actions { min-width: 210px; }
 
 /* =========================================================================
+   ADVERTISEMENTS
+   ========================================================================= */
+
+/*
+   Ad containers are visually distinct from every other panel on the site:
+   extra top margin, a dashed rule and a small explicit label. That separation
+   is deliberate — an ad must never read as a match card, a stream link or a
+   control. Nothing is reserved until a real ad unit is configured, so the
+   space collapses instead of leaving an empty grey box.
+*/
+
+.ad-slot {
+  border-top: 1px dashed var(--color-border);
+  display: block;
+  margin-top: clamp(28px, 4vw, 44px);
+  padding-top: 14px;
+}
+
+.ad-slot-label {
+  color: var(--color-text-muted);
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+/* Reserve a sensible block so the ad cannot shift the page as it loads. */
+.ad-slot-unit {
+  min-height: 90px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .ad-slot-unit { min-height: 120px; }
+}
+
+@media (min-width: 1024px) {
+  .ad-slot-unit { min-height: 90px; }
+}
+
+/* =========================================================================
    RESPONSIVE
    ========================================================================= */
 

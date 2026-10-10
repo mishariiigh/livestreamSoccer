@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, Clock, ExternalLink, Radio, Tv } from "lucide-react";
 import { notFound } from "next/navigation";
+import AdSlot from "@/components/ad-slot";
 import FixtureStreamPlayer from "@/components/fixture-stream-player";
 import { getAuthorizedStream } from "@/lib/streaming/fixture-service";
 import { getOfficialWatchLinks } from "@/lib/streaming/official-watch-links";
@@ -128,6 +129,11 @@ export default async function MatchPage({ params }: PageProps<"/match/[fixtureId
           <p>لا يتوفر بث لهذه المباراة حالياً. ستظهر مصادر المشاهدة هنا عند إضافتها.</p>
         </div>
       )}
+
+      {/* ── ADVERTISEMENT ─────────────────────────────────────────────────
+          Rendered last, after the player and the broadcaster links, so it can
+          never sit beside or inside controls that look like streaming options. */}
+      <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_MATCH} />
     </main>
   );
 }

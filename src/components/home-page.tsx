@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, Radio, Tv } from "lucide-react";
 import { useMemo, useState } from "react";
+import AdSlot from "@/components/ad-slot";
 import MatchCard from "@/components/match-card";
 import { useLocale } from "@/components/locale-provider";
 import { EmptyState } from "@/components/ui/primitives";
@@ -139,6 +140,13 @@ export default function HomePage({
           />
         )}
       </section>
+
+      {/* ── ADVERTISEMENT ─────────────────────────────────────────────────
+          Sits between two content sections, well clear of match cards,
+          navigation and any control a visitor might click expecting a stream. */}
+      <div className="page-width">
+        <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOME} label={locale === "ar" ? "إعلان" : "Advertisement"} />
+      </div>
 
       {/* ── UPCOMING ──────────────────────────────────────────────────── */}
       <section className="content-section page-width">
