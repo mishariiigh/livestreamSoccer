@@ -9,7 +9,7 @@ import "./globals.css";
 import "./platform.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://me7gan-live.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://me7gan-live.vercel.app"),
   title: { default: `${BRAND.ar} | ${BRAND.en}`, template: `%s | ${BRAND.ar}` },
   description: "محقان لايف منصة لمتابعة مباريات كرة القدم وجدولها والبثوث المتاحة لكل مباراة.",
   applicationName: BRAND.ar,
