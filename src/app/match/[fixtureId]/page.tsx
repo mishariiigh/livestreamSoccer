@@ -20,7 +20,11 @@ export default async function MatchPage({ params }: PageProps<"/match/[fixtureId
     getAuthorizedStream(match.fixtureId).catch(() => ({ primary: null, fallbacks: [] })),
   ]);
 
-  const hasPlayableStream = Boolean(authorizedStreams.primary || authorizedStreams.fallbacks.length > 0);
+  const allAuthorizedSources = [authorizedStreams.primary, ...authorizedStreams.fallbacks].filter(
+    (source) => source !== null,
+  );
+  const hasPlayableStream = allAuthorizedSources.some((source) => source.stream_type !== "external");
+  const hasAuthorizedSource = allAuthorizedSources.length > 0;
 
   return (
     <main id="main-content" className="page-width match-page">
@@ -59,7 +63,7 @@ export default async function MatchPage({ params }: PageProps<"/match/[fixtureId
       <section className="player-section" aria-label="مشغل البث">
         <div className="player-section-head">
           <h2><Radio size={17} aria-hidden="true" /> البث داخل الموقع</h2>
-          {hasPlayableStream && <span className="badge badge-stream">مصدر مصرح به</span>}
+          {hasAuthorizedSource && <span className="badge badge-stream">مصدر مصرح به</span>}
         </div>
         <div className="player-section-body">
           {hasPlayableStream ? (
@@ -68,9 +72,11 @@ export default async function MatchPage({ params }: PageProps<"/match/[fixtureId
               title={`${match.home.name} vs ${match.away.name}`}
             />
           ) : (
-            <div className="fixture-stream-unavailable" role="status">
-              <p>البث غير متاح حالياً</p>
-            </div>
+            <FixtureStreamPlayer
+              streams={{ primary: null, fallbacks: [] }}
+              title={`${match.home.name} vs ${match.away.name}`}
+              externalOnly={allAuthorizedSources}
+            />
           )}
         </div>
         <div className="player-section-foot">
@@ -117,7 +123,7 @@ export default async function MatchPage({ params }: PageProps<"/match/[fixtureId
       )}
 
       {/* ── NO SOURCE AT ALL ──────────────────────────────────────────── */}
-      {!hasPlayableStream && officialWatchLinks.length === 0 && (
+      {!hasAuthorizedSource && officialWatchLinks.length === 0 && (
         <div className="fixture-stream-external-only">
           <p>لا يتوفر بث لهذه المباراة حالياً. ستظهر مصادر المشاهدة هنا عند إضافتها.</p>
         </div>

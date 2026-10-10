@@ -1,12 +1,25 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { ExternalLink, Tv } from "lucide-react";
 import EmbedPlayer from "@/components/embed-player";
 import HlsPlayer from "@/components/hls-player";
 import type { AuthorizedFixtureStream, AuthorizedFixtureStreams } from "@/lib/streaming/fixture-stream-types";
 import { resolvePlayerForStoredStream } from "@/lib/streaming/stream-source";
 
-export default function FixtureStreamPlayer({ streams, title }: { streams: AuthorizedFixtureStreams; title: string }) {
+export default function FixtureStreamPlayer({
+  streams,
+  title,
+  externalOnly = [],
+}: {
+  streams: AuthorizedFixtureStreams;
+  title: string;
+  /**
+   * Authorized sources for a match that has no playable stream. When set, the
+   * widget shows the external viewing options instead of a broken player.
+   */
+  externalOnly?: AuthorizedFixtureStream[];
+}) {
   const allSources = useMemo(
     () => [streams.primary, ...streams.fallbacks].filter((source): source is AuthorizedFixtureStream => Boolean(source)),
     [streams],
@@ -16,8 +29,8 @@ export default function FixtureStreamPlayer({ streams, title }: { streams: Autho
   // here so the internal player keeps working exactly as before, with the links
   // offered as an additional viewing option.
   const externalSources = useMemo(
-    () => allSources.filter((source) => source.stream_type === "external"),
-    [allSources],
+    () => [...allSources, ...externalOnly].filter((source) => source.stream_type === "external"),
+    [allSources, externalOnly],
   );
   const sources = useMemo(
     () => allSources.filter((source) => source.stream_type !== "external"),
@@ -38,8 +51,8 @@ export default function FixtureStreamPlayer({ streams, title }: { streams: Autho
     }
   }, [activeIndex, sources]);
 
-  // Nothing playable, but an official link exists: show the link instead of a
-  // broken player.
+  // Nothing playable, but an authorized external link exists: show the link
+  // instead of a broken player. The copy never implies a video is playing here.
   if (!activeSource) {
     return (
       <div className="fixture-stream-player">
@@ -49,6 +62,7 @@ export default function FixtureStreamPlayer({ streams, title }: { streams: Autho
           </div>
         ) : (
           <div className="fixture-stream-external-only">
+            <p className="fixture-stream-external-badge">مصدر مصرح به</p>
             <p>لا يتوفر بث مباشر داخل الموقع لهذه المباراة، ويمكنك المشاهدة عبر الناقل الرسمي.</p>
           </div>
         )}
@@ -102,33 +116,61 @@ export default function FixtureStreamPlayer({ streams, title }: { streams: Autho
 }
 
 /**
- * Official external viewing options.
+ * External viewing options.
  *
  * These open in a new tab with `rel="noopener noreferrer"`. The page is never
  * proxied or framed, so the broadcaster's own security policies apply.
  */
 function ExternalLinks({ sources }: { sources: AuthorizedFixtureStream[] }) {
   return (
-    <section className="fixture-stream-external" aria-label="خيارات المشاهدة الرسمية">
-      <p className="fixture-stream-external-heading">خيارات المشاهدة</p>
-      <div className="fixture-stream-external-list">
-        {sources.map((source) => (
-          <a
-            key={source.id}
-            className="fixture-stream-external-link"
-            href={source.stream_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            referrerPolicy="no-referrer"
-          >
-            <span aria-hidden="true">📺</span>
-            <span>
-              <strong>مشاهدة البث الرسمي</strong>
-              <small>{source.provider_name}</small>
-            </span>
-          </a>
-        ))}
+    <section className="watch-options" aria-label="خيارات المشاهدة">
+      <div className="watch-options-head">
+        <Tv size={16} aria-hidden="true" />
+        <h3>خيارات المشاهدة</h3>
+        <span className="watch-options-count">{sources.length}</span>
       </div>
+      <p className="watch-options-note">
+        روابط خارجية تُفتح في نافذة جديدة على موقع الناقل، ولا يبدأ التشغيل داخل الموقع.
+      </p>
+      <ul className="watch-options-list">
+        {sources.map((source, index) => {
+          const host = hostName(source.stream_url);
+          return (
+            <li key={source.id}>
+              <a
+                className="watch-option"
+                href={source.stream_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+              >
+                <span className="watch-option-index ltr" aria-hidden="true">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="watch-option-copy">
+                  <strong>مشاهدة البث الرسمي</strong>
+                  <span className="watch-option-meta">
+                    {source.provider_name && (
+                      <small className="watch-option-provider">{source.provider_name}</small>
+                    )}
+                    {host && <small className="watch-option-host ltr">{host}</small>}
+                  </span>
+                </span>
+                <ExternalLink size={15} aria-hidden="true" className="watch-option-go" />
+              </a>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
+}
+
+/** Display host of an external URL. Returns "" when the URL cannot be parsed. */
+function hostName(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }

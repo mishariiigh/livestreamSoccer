@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarDays, Home, Menu, Radio, ShieldCheck, X } from "lucide-react";
@@ -28,11 +29,17 @@ export default function SiteHeader() {
     <header className="site-header">
       <div className="page-width header-inner">
         <Link href="/" className="brand" aria-label={`${BRAND.ar} — الرئيسية`}>
-          <span className="brand-mark" aria-hidden="true">{BRAND.mark}</span>
-          <span className="brand-copy">
-            <span className="brand-word">{BRAND.ar}</span>
-            <span className="brand-caption">{BRAND.en}</span>
-          </span>
+          <Image
+            className="brand-logo"
+            src={BRAND.logo}
+            alt={`${BRAND.ar} — ${BRAND.en}`}
+            width={BRAND.logoWidth}
+            height={BRAND.logoHeight}
+            // The logo is rendered ~64-70px wide; without this hint next/image
+            // serves the largest source variant.
+            sizes="70px"
+            priority
+          />
         </Link>
 
         <nav className="main-nav" aria-label={locale === "ar" ? "التنقل الرئيسي" : "Main navigation"}>

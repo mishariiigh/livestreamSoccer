@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -234,6 +235,9 @@ export default function AdminConsole() {
     }));
   }
 
+  /** Stream fields are only submitted when a URL has been entered. */
+  const hasStreamDraft = Boolean(draft.streamUrl.trim());
+
   /** Validates the stream half of the form and returns the API payload. */
   function readStreamFields(fixtureId: string) {
     const rawUrl = draft.streamUrl.trim();
@@ -326,7 +330,12 @@ export default function AdminConsole() {
       flash(error instanceof Error ? error.message : "تحقق من إعدادات البث.");
       return;
     }
-    if (!parsed.fields) return;
+    // No URL entered: only an explicit source edit is cleared, so saving a match
+    // never deletes or overwrites a source the administrator did not touch.
+    if (!parsed.fields) {
+      if (editingStreamId) resetStreamFields();
+      return;
+    }
 
     const row = await requestAdmin(
       "/api/admin/fixture-streams",
@@ -336,6 +345,9 @@ export default function AdminConsole() {
     if (!row) throw new Error("تعذر حفظ مصدر البث.");
     const item = mapStream(row);
     setStreams((current) => [...current.filter((stream) => stream.id !== item.id), item]);
+    // The form returns to "add" mode so the next source is inserted as a new,
+    // independent row instead of updating the one just saved.
+    resetStreamFields();
   }
 
   async function submitMatch(form: React.FormEvent<HTMLFormElement>) {
@@ -360,7 +372,7 @@ export default function AdminConsole() {
 
       // Validate the stream before writing anything, so a bad URL cannot leave a
       // match saved without the stream the administrator intended to attach.
-      if (draft.streamUrl.trim()) readStreamFields(editingMatch ?? "PENDING");
+      if (hasStreamDraft) readStreamFields(editingMatch ?? "PENDING");
 
       const row = await requestAdmin(
         editingMatch ? `/api/admin/matches/${editingMatch}` : "/api/admin/matches",
@@ -392,14 +404,20 @@ export default function AdminConsole() {
     }
   }
 
-  function editMatch(match: ManagedMatch) {
-    const stream = streams
-      .filter((entry) => entry.fixtureId === match.fixtureId)
-      .sort(compareStreams)[0];
+  /** Clears the stream half of the form so a new independent source can be added. */
+  function resetStreamFields() {
+    setEditingStreamId(null);
+    setDraft((current) => ({ ...current, ...EMPTY_STREAM }));
+  }
 
+  function editMatch(match: ManagedMatch) {
     setEditingMatch(match.fixtureId);
-    setEditingStreamId(stream?.id ?? null);
-    setDraft({
+    // The match form edits the match only. Its sources are managed independently
+    // in the stream sources table below, so loading a source here would overwrite
+    // it on save and prevent a second source from being added.
+    setEditingStreamId(null);
+    setDraft((current) => ({
+      ...current,
       matchDate: match.matchDate,
       kickoffTime: match.kickoffTime,
       competition: match.competition,
@@ -408,12 +426,22 @@ export default function AdminConsole() {
       homeTeamLogo: match.homeTeamLogo,
       awayTeamLogo: match.awayTeamLogo,
       published: match.published,
-      streamType: stream?.streamType ?? "hls",
-      streamUrl: stream?.streamUrl ?? "",
-      providerName: stream?.providerName ?? "",
-      active: stream?.active ?? true,
-      priority: String(stream?.priority ?? 1),
-    });
+      ...EMPTY_STREAM,
+    }));
+    document.getElementById("match-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Loads one source into the form so it can be edited on its own. */
+  function editStream(stream: ManagedStream) {
+    setEditingStreamId(stream.id);
+    setDraft((current) => ({
+      ...current,
+      streamType: stream.streamType === "external" ? "external" : stream.streamType === "hls" ? "hls" : "embed",
+      streamUrl: stream.streamUrl,
+      providerName: stream.providerName,
+      active: stream.active,
+      priority: String(stream.priority),
+    }));
     document.getElementById("match-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -500,7 +528,13 @@ export default function AdminConsole() {
       <div className="admin-shell">
         <aside className="admin-sidebar">
           <Link href="/admin" className="admin-brand">
-            <span className="brand-mark" aria-hidden="true">{BRAND.mark}</span>
+            <Image
+              className="admin-brand-logo"
+              src={BRAND.logo}
+              alt={`${BRAND.ar} — ${BRAND.en}`}
+              width={BRAND.logoWidth}
+              height={BRAND.logoHeight}
+            />
             <span className="admin-brand-copy">
               <strong>{BRAND.ar}</strong>
               <small>{BRAND.en}</small>
@@ -593,6 +627,16 @@ export default function AdminConsole() {
                   <option value="external">رابط رسمي خارجي</option>
                 </select>
               </AdminField>
+              <AdminField label="إضافة المصدر إلى مباراة">
+                <select value={editingMatch ?? ""} onChange={(event) => setEditingMatch(event.target.value || null)}>
+                  <option value="">{editingMatch ? "المباراة قيد التعديل" : "اختر مباراة موجودة (اختياري)"}</option>
+                  {matches.map((match) => (
+                    <option key={match.fixtureId} value={match.fixtureId}>
+                      {match.homeTeam} × {match.awayTeam} · {match.matchDate} · {match.fixtureId}
+                    </option>
+                  ))}
+                </select>
+              </AdminField>
               <AdminField label={draft.streamType === "external" ? "رابط المشاهدة الرسمي" : "رابط البث الآمن HTTPS"}>
                 <input
                   type="url"
@@ -636,7 +680,13 @@ export default function AdminConsole() {
               <div className="admin-form-actions">
                 <button className="primary-action" type="submit" disabled={saving}>
                   <Plus size={16} />
-                  {saving ? "جارٍ الحفظ…" : editingMatch ? "حفظ التعديلات" : "حفظ المباراة"}
+                  {saving
+                    ? "جارٍ الحفظ…"
+                    : editingMatch
+                      ? "حفظ التعديلات"
+                      : editingStreamId
+                        ? "حفظ مصدر البث"
+                        : "حفظ المباراة"}
                 </button>
                 {editingMatch && (
                   <button className="secondary-action" type="button" onClick={resetDraft}>إلغاء</button>
@@ -755,7 +805,10 @@ export default function AdminConsole() {
             </div>
             <div className="stream-warning">
               <Radio size={17} />
-              <span>يبدأ المصدر النشط الأعلى أولوية، وتبقى المصادر الأخرى احتياطية عند تعذر التشغيل.</span>
+              <span>
+                يبدأ المصدر النشط الأعلى أولوية، وتبقى المصادر الأخرى احتياطية عند تعذر التشغيل. يمكن إضافة عدة مصادر
+                مستقلة للمباراة نفسها من النموذج أعلاه، وتعديل أو حذف كل مصدر على حدة من الجدول أدناه.
+              </span>
             </div>
             <div className="admin-table-block">
               <div className="admin-table-scroll">
@@ -787,7 +840,8 @@ export default function AdminConsole() {
                               </button>
                             </td>
                             <td className="table-actions">
-                              <button type="button" onClick={() => void deleteStream(stream.id)} aria-label="حذف مصدر البث"><Trash2 size={15} /></button>
+                              <button type="button" onClick={() => editStream(stream)} aria-label="تعديل مصدر البث" title="تعديل مصدر البث"><Pencil size={14} /></button>
+                              <button type="button" onClick={() => void deleteStream(stream.id)} aria-label="حذف مصدر البث" title="حذف مصدر البث"><Trash2 size={15} /></button>
                             </td>
                           </tr>
                         ))
