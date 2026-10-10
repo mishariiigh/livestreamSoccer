@@ -38,6 +38,12 @@ export const metadata: Metadata = {
     images: ["/icon-512.png"],
   },
   alternates: { canonical: "/" },
+  // Google AdSense site-verification tag. `metadata.other` is the App Router's
+  // supported way to emit an arbitrary <meta> into <head> without hand-writing
+  // the document. Declared once here so it is never duplicated per page.
+  other: {
+    "google-adsense-account": "ca-pub-1543283177172409",
+  },
 };
 
 /** Browser UI color, matched to the light brand canvas. */
